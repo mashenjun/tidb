@@ -163,3 +163,23 @@ func (c *conditionChecker) checkColumn(expr expression.Expression) bool {
 	}
 	return c.colUniqueID == col.UniqueID
 }
+
+// checkPrefixLen is called after check
+func (c *conditionChecker) checkPrefixLen(expr expression.Expression) bool {
+	switch x := expr.(type) {
+	case *expression.ScalarFunction:
+		if _, ok := x.GetArgs()[0].(*expression.Constant); ok {
+			if c.checkColumn(x.GetArgs()[1]) {
+				// todo wrong len
+				return x.GetArgs()[0].GetType().Flen <= c.length
+			}
+		}
+		if _, ok := x.GetArgs()[1].(*expression.Constant); ok {
+			if c.checkColumn(x.GetArgs()[0]) {
+				// todo wrong len
+				return x.GetArgs()[1].GetType().Flen <= c.length
+			}
+		}
+	}
+	return false
+}

@@ -1346,6 +1346,13 @@
           "IndexReader_6 0.33 root  index:IndexRangeScan_5",
           "└─IndexRangeScan_5 0.33 cop[tikv] table:t3, index:a(a, b, c) range:(\"a\" \"b\" \"c\",\"a\" \"b\" +inf], keep order:false, stats:pseudo"
         ]
+      },
+      {
+        "SQL": "explain select * from t4 where a between 'a' and 'a' and b = 'b'",
+        "Plan": [
+          "IndexReader_6 0.10 root  index:IndexRangeScan_5",
+          "└─IndexRangeScan_5 0.10 cop[tikv] table:t4, index:a_b(a, b) range:[\"a\" \"b\",\"a\" \"b\"], keep order:false, stats:pseudo"
+        ]
       }
     ]
   }

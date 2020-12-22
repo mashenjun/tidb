@@ -53,6 +53,9 @@ func detachColumnCNFConditions(sctx sessionctx.Context, conditions []expression.
 		}
 		accessConditions = append(accessConditions, cond)
 		if checker.shouldReserve {
+			if checker.checkPrefixLen(cond) {
+				continue
+			}
 			filterConditions = append(filterConditions, cond)
 			checker.shouldReserve = checker.length != types.UnspecifiedLength
 		}
@@ -518,6 +521,15 @@ func ExtractEqAndInCondition(sctx sessionctx.Context, conditions []expression.Ex
 			break
 		}
 		if lengths[i] != types.UnspecifiedLength {
+			var maxPrefixLen int
+			for _, val := range expression.ExtractPrefixIndexLens(cond, nil, nil){
+				if val > maxPrefixLen {
+					maxPrefixLen = val
+				}
+			}
+			if lengths[i] >= maxPrefixLen {
+				continue
+			}
 			filters = append(filters, cond)
 		}
 	}

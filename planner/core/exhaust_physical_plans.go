@@ -1012,7 +1012,7 @@ func (p *LogicalJoin) constructInnerIndexScanTask(
 		Columns:        ds.TblCols,
 		ColumnNames:    ds.names,
 	}
-	if !ds.isCoveringIndex(ds.schema.Columns, path.FullIdxCols, path.FullIdxColLens, is.Table) {
+	if !ds.isCoveringIndex(ds.schema.Columns, path.FullIdxCols, path.FullIdxColLens, is.Table, path.IdxPrefixLens, path.Ranges) {
 		// On this way, it's double read case.
 		ts := PhysicalTableScan{
 			Columns:         ds.Columns,
@@ -1032,7 +1032,7 @@ func (p *LogicalJoin) constructInnerIndexScanTask(
 		cop.commonHandleCols = ds.commonHandleCols
 	}
 	is.initSchema(append(path.FullIdxCols, ds.commonHandleCols...), cop.tablePlan != nil)
-	indexConds, tblConds := ds.splitIndexFilterConditions(filterConds, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
+	indexConds, tblConds := ds.splitIndexFilterConditions(filterConds, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo, path.IdxPrefixLens)
 	if maxOneRow {
 		// Theoretically, this line is unnecessary because row count estimation of join should guarantee rowCount is not larger
 		// than 1.0; however, there may be rowCount larger than 1.0 in reality, e.g, pseudo statistics cases, which does not reflect

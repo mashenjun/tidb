@@ -25,14 +25,15 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/opcode"
 	"github.com/pingcap/parser/terror"
+	"go.uber.org/zap"
+	"golang.org/x/tools/container/intsets"
+
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/collate"
 	"github.com/pingcap/tidb/util/logutil"
-	"go.uber.org/zap"
-	"golang.org/x/tools/container/intsets"
 )
 
 // cowExprRef is a copy-on-write slice ref util using in `ColumnSubstitute`
@@ -116,6 +117,64 @@ func ExtractColumns(expr Expression) []*Column {
 	return extractColumns(result, expr, nil)
 }
 
+func ExtractPrefixIndexLens(expr Expression, colFilter func(*Column) bool, constantFilter func(constant *Constant) bool) map[int64]int{
+	var pivotForCols, pivotForConstants int
+	prefixLens := make(map[int64]int)
+	mergePrefixLen := func(cols []*Column, constants []*Constant) {
+		if pivotForCols == len(cols) || pivotForConstants == len(constants) {
+			pivotForCols, pivotForConstants = len(cols), len(constants)
+			return
+		}
+		maxPrefixLen := 0
+		for ; pivotForConstants < len(constants); pivotForConstants++ {
+			// we only consider the string and bytes type
+			// todo should consider the collation info
+			if len(constants[pivotForConstants].Value.GetBytes()) > maxPrefixLen  {
+				maxPrefixLen = len(constants[pivotForConstants].Value.GetBytes())
+			}
+		}
+		for ; pivotForCols < len(cols); pivotForCols++ {
+			col := cols[pivotForCols]
+			if l := prefixLens[col.UniqueID]; maxPrefixLen > l {
+				prefixLens[col.UniqueID] = maxPrefixLen
+			}
+		}
+	}
+	cols := make([]*Column, 0, 8)
+	constants := make([]*Constant, 0, 8)
+	extractColumnsAndPrefixLen(cols, constants, expr, colFilter, constantFilter, mergePrefixLen)
+	return prefixLens
+}
+
+func ExtractPrefixIdxLenFromExpressions(exprs []Expression, colFilter func(*Column) bool, constantFilter func(constant *Constant) bool) map[int64]int {
+	var pivotForCols, pivotForConstants int
+	prefixLens := make(map[int64]int)
+	mergePrefixLen := func(cols []*Column, constants []*Constant) {
+		if pivotForCols == len(cols) || pivotForConstants == len(constants) {
+			pivotForCols, pivotForConstants = len(cols), len(constants)
+			return
+		}
+		maxPrefixLen := 0
+		for ; pivotForConstants < len(constants); pivotForConstants++ {
+			if len(constants[pivotForConstants].Value.GetBytes()) > maxPrefixLen  {
+				maxPrefixLen = len(constants[pivotForConstants].Value.GetBytes())
+			}
+		}
+		for ; pivotForCols < len(cols); pivotForCols++ {
+			col := cols[pivotForCols]
+			if l := prefixLens[col.UniqueID]; maxPrefixLen > l {
+				prefixLens[col.UniqueID] = maxPrefixLen
+			}
+		}
+	}
+	cols := make([]*Column, 0, 8)
+	constants := make([]*Constant, 0, 8)
+	for _, expr := range exprs {
+		cols, constants = extractColumnsAndPrefixLen(cols, constants, expr, colFilter, constantFilter, mergePrefixLen)
+	}
+	return prefixLens
+}
+
 // ExtractCorColumns extracts correlated column from given expression.
 func ExtractCorColumns(expr Expression) (cols []*CorrelatedColumn) {
 	switch v := expr.(type) {
@@ -159,6 +218,27 @@ func extractColumns(result []*Column, expr Expression, filter func(*Column) bool
 		}
 	}
 	return result
+}
+
+func extractColumnsAndPrefixLen(cols []*Column, constants []*Constant, expr Expression, colFilter func(*Column) bool, constantFilter func(*Constant) bool, mergePrefixLens func([]*Column, []*Constant)) ([]*Column, []*Constant) {
+	switch v := expr.(type) {
+	case *Column:
+		if colFilter == nil || colFilter(v) {
+			cols = append(cols, v)
+		}
+	case *Constant:
+		if constantFilter == nil || constantFilter(v) {
+			constants = append(constants, v)
+		}
+	case *ScalarFunction:
+		for _, arg := range v.GetArgs() {
+			cols, constants = extractColumnsAndPrefixLen(cols, constants, arg, colFilter, constantFilter, mergePrefixLens)
+		}
+		if mergePrefixLens != nil {
+			mergePrefixLens(cols, constants)
+		}
+	}
+	return cols, constants
 }
 
 // ExtractColumnSet extracts the different values of `UniqueId` for columns in expressions.

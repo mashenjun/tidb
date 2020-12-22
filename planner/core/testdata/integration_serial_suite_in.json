@@ -89,5 +89,14 @@
       "explain select /*+ inl_hash_join(s) */ * from t join s on t.a=s.a and t.b = s.a",
       "explain select /*+ inl_hash_join(s) */ * from t join s on t.a=s.a and t.a = s.b"
     ]
+  },
+  {
+    "name": "TestPrefixIndexPushDown",
+    "cases": [
+      "explain select a,b from t where a between 'aaaa' and 'bbbb' and b = 'b'",
+      "explain select a,b from t where a between 'a' and 'b' and b = 'bbbb'",
+      "explain select a,b from t where b between 'b' and 'c'",
+      "explain select a,b from t where a between 'a' and 'b' and b = 'b'"
+    ]
   }
 ]

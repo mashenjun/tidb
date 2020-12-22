@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
+
 	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
@@ -1331,13 +1332,12 @@ func (s *testIntegrationSerialSuite) TestIssue16407(c *C) {
 	tk.MustExec("use test")
 	tk.MustExec("drop table if exists t")
 	tk.MustExec("create table t(a int,b char(100),key(a),key(b(10)))")
-	tk.MustQuery("explain select /*+ use_index_merge(t) */ * from t where a=10 or b='x'").Check(testkit.Rows(
+	tk.MustQuery("explain select /*+ use_index_merge(t) */ * from t where a=10 or 'x'=b").Check(testkit.Rows(
 		"Projection_4 19.99 root  test.t.a, test.t.b",
-		"└─IndexMerge_9 0.02 root  ",
+		"└─IndexMerge_8 19.99 root  ",
 		"  ├─IndexRangeScan_5(Build) 10.00 cop[tikv] table:t, index:a(a) range:[10,10], keep order:false, stats:pseudo",
 		"  ├─IndexRangeScan_6(Build) 10.00 cop[tikv] table:t, index:b(b) range:[\"x\",\"x\"], keep order:false, stats:pseudo",
-		"  └─Selection_8(Probe) 0.02 cop[tikv]  eq(test.t.b, \"x\")",
-		"    └─TableRowIDScan_7 19.99 cop[tikv] table:t keep order:false, stats:pseudo"))
+		"  └─TableRowIDScan_7(Probe) 19.99 cop[tikv] table:t keep order:false, stats:pseudo"))
 	tk.MustQuery("show warnings").Check(testkit.Rows())
 	tk.MustExec("insert into t values (1, 'xx')")
 	tk.MustQuery("select /*+ use_index_merge(t) */ * from t where a=10 or b='x'").Check(testkit.Rows())
@@ -2212,6 +2212,31 @@ func (s *testIntegrationSuite) TestConvertRangeToPoint(c *C) {
 
 	tk.MustExec("drop table if exists t3")
 	tk.MustExec("create table t3 (a char(10), b char(10), c char(10), index(a, b, c))")
+
+	tk.MustExec("drop table if exists t4")
+	tk.MustExec("create table t4 (a text, b text, index a_b (a(3), b(3)))")
+
+	var input []string
+	var output []struct {
+		SQL  string
+		Plan []string
+	}
+	s.testData.GetTestCases(c, &input, &output)
+	for i, tt := range input {
+		s.testData.OnRecord(func() {
+			output[i].SQL = tt
+			output[i].Plan = s.testData.ConvertRowsToStrings(tk.MustQuery(tt).Rows())
+		})
+		tk.MustQuery(tt).Check(testkit.Rows(output[i].Plan...))
+	}
+}
+
+func (s *testIntegrationSerialSuite) TestPrefixIndexPushDown(c *C) {
+	// #21145
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t (a text, b text, c text, index a_b (a(3), b(3)))")
 
 	var input []string
 	var output []struct {

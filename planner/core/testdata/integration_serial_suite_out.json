@@ -593,5 +593,46 @@
         ]
       }
     ]
+  },
+  {
+    "Name": "TestPrefixIndexPushDown",
+    "Cases": [
+      {
+        "SQL": "explain select a,b from t where a between 'aaaa' and 'bbbb' and b = 'b'",
+        "Plan": [
+          "IndexLookUp_12 0.25 root  ",
+          "├─Selection_10(Build) 0.25 cop[tikv]  eq(test.t.b, \"b\")",
+          "│ └─IndexRangeScan_8 250.00 cop[tikv] table:t, index:a_b(a, b) range:[\"aaa\",\"bbb\"], keep order:false, stats:pseudo",
+          "└─Selection_11(Probe) 0.25 cop[tikv]  ge(test.t.a, \"aaaa\"), le(test.t.a, \"bbbb\")",
+          "  └─TableRowIDScan_9 0.25 cop[tikv] table:t keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select a,b from t where a between 'a' and 'b' and b = 'bbbb'",
+        "Plan": [
+          "IndexLookUp_11 0.25 root  ",
+          "├─IndexRangeScan_8(Build) 250.00 cop[tikv] table:t, index:a_b(a, b) range:[\"a\",\"b\"], keep order:false, stats:pseudo",
+          "└─Selection_10(Probe) 0.25 cop[tikv]  eq(test.t.b, \"bbbb\")",
+          "  └─TableRowIDScan_9 250.00 cop[tikv] table:t keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select a,b from t where b between 'b' and 'c'",
+        "Plan": [
+          "TableReader_7 250.00 root  data:Selection_6",
+          "└─Selection_6 250.00 cop[tikv]  ge(test.t.b, \"b\"), le(test.t.b, \"c\")",
+          "  └─TableFullScan_5 10000.00 cop[tikv] table:t keep order:false, stats:pseudo"
+        ]
+      },
+      {
+        "SQL": "explain select a,b from t where a between 'a' and 'b' and b = 'b'",
+        "Plan": [
+          "IndexLookUp_11 0.25 root  ",
+          "├─Selection_10(Build) 0.25 cop[tikv]  eq(test.t.b, \"b\")",
+          "│ └─IndexRangeScan_8 250.00 cop[tikv] table:t, index:a_b(a, b) range:[\"a\",\"b\"], keep order:false, stats:pseudo",
+          "└─TableRowIDScan_9(Probe) 0.25 cop[tikv] table:t keep order:false, stats:pseudo"
+        ]
+      }
+    ]
   }
 ]
