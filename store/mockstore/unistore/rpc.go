@@ -59,8 +59,12 @@ type RPCClient struct {
 	rpcCli Client
 }
 
-// UnistoreRPCClientSendHook exports for test.
-var UnistoreRPCClientSendHook func(*tikvrpc.Request)
+var unistoreRPCClientSendHook atomic.Value
+
+// SetUnistoreRPCClientSendHook exports for test.
+func SetUnistoreRPCClientSendHook(fn func(request *tikvrpc.Request)) {
+	unistoreRPCClientSendHook.Store(fn)
+}
 
 // SendRequest sends a request to mock cluster.
 func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
@@ -71,8 +75,10 @@ func (c *RPCClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.R
 	})
 
 	failpoint.Inject("unistoreRPCClientSendHook", func(val failpoint.Value) {
-		if val.(bool) && UnistoreRPCClientSendHook != nil {
-			UnistoreRPCClientSendHook(req)
+		if val.(bool) {
+			if fn, ok := unistoreRPCClientSendHook.Load().(func(*tikvrpc.Request)); ok {
+				fn(req)
+			}
 		}
 	})
 

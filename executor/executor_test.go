@@ -8428,7 +8428,7 @@ func (s *testResourceTagSuite) TestResourceGroupTag(c *C) {
 
 	var sqlDigest, planDigest *parser.Digest
 	checkFn := func() {}
-	unistore.UnistoreRPCClientSendHook = func(req *tikvrpc.Request) {
+	hookFn := func(req *tikvrpc.Request) {
 		var startKey []byte
 		var ctx *kvrpcpb.Context
 		switch req.Type {
@@ -8471,6 +8471,7 @@ func (s *testResourceTagSuite) TestResourceGroupTag(c *C) {
 		planDigest = parser.NewDigest(tag.PlanDigest)
 		checkFn()
 	}
+	unistore.SetUnistoreRPCClientSendHook(hookFn)
 
 	resetVars := func() {
 		sqlDigest = parser.NewDigest(nil)
